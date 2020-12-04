@@ -135,13 +135,14 @@ def create_synthetic_data(A, B, C, Rt, Qt, x, P, num_samples=100):
     for i in range(num_samples):
         x = A @ x + np.random.multivariate_normal(np.zeros(len(A)), Rt)[:, np.newaxis]
         x_list.append(x)
-        z = C@x + np.random.multivariate_normal(np.zeros(1),Qt)
+        z = C @ x + np.random.multivariate_normal(np.zeros(1), Qt)
         z_list.append(z.squeeze())
     return x_list, z_list
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+
     del_t = .1
     A = np.array([[1, del_t, del_t ** 2 / 2],
                   [0, 1, del_t],
@@ -151,14 +152,14 @@ if __name__ == '__main__':
 
     Rt = np.diag([0, 0, 2])
 
-    Qt = np.array([[.2]])
+    Qt = np.array([[2]])
 
     x = np.array([[500], [0], [0]])
-    P = np.zeros(3)
+    P = np.zeros(1)
 
     x_list, z_list = create_synthetic_data(A, B, C, Rt, Qt, x, P, num_samples=100)
 
-    plt.plot(z_list,'+')
+    plt.plot(z_list, '+')
     plt.show()
 
     # del_t = .1
