@@ -5,7 +5,7 @@ Table 3.1 on page 36 is a good jumping off location
 '''
 
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 def discrete_propagate(x, P, A, Rt, B=None, u=None):
     """
@@ -129,38 +129,109 @@ def discrete_sensor_update(x, P, C, z, Qt, outlier_thresh=None):
     return x_out, P_out
 
 
-def create_synthetic_data(A, B, C, Rt, Qt, x, P, num_samples=100):
-    x_list = []
-    z_list = []
-    for i in range(num_samples):
-        x = A @ x + np.random.multivariate_normal(np.zeros(len(A)), Rt)[:, np.newaxis]
+def get_transformed_covariance(C, P):
+    """
+
+    :param C:
+    :type C:
+    :param P:
+    :type P:
+    :return:
+    :rtype:
+    """
+    return C @ P @ C.T
+
+
+def create_synthetic_data(A_cont, C, Rt, Qt, x, num_samples=100):
+    time_list = np.linspace(0,30,num_samples)
+    delta = time_list[1]-time_list[0]
+    time_list += np.random.random(num_samples)/5*delta
+    x_list, z_list = [], []
+    for idx in range(len(time_list)-1):
+        delta_t = time_list[idx+1]-time_list[idx]
+        A = continuous2discrete(A_cont,delta_t)
+        x = A @ x + np.random.multivariate_normal(np.zeros(len(A)), delta_t*Rt)[:, np.newaxis]
         x_list.append(x)
         z = C @ x + np.random.multivariate_normal(np.zeros(1), Qt)
         z_list.append(z.squeeze())
-    return x_list, z_list
+    return time_list, x_list, z_list
 
+# def kalman_filter(x0,P0,A,B,C,Rt,Qt,u_list,z_list):
+
+
+def kalman_josh_main(A_cont,C,Rt,Qt,time_list,z_list):
+    x = np.array([[z_list[0],0,0]]).T
+    P = np.diag([1,10,10])
+
+
+    x_list, P_list = [], []
+
+    for idx, measurement in enumerate(z_list):
+        delta_t = time_list[idx + 1] - time_list[idx]
+        A = continuous2discrete(A_cont, delta_t)
+        x, P = discrete_propagate(x, P, A, delta_t*Rt)
+        x, P = discrete_sensor_update(x, P, C, measurement, Qt)
+        x_list.append(x)
+        P_list.append(P)
+
+    x_list = np.atleast_3d(x_list)
+    P_list = np.atleast_3d(P_list)
+    fig, ax_list = plt.subplots(3,1, sharex=True, figsize=(10,10))
+    plt.sca(ax_list[0])
+    plt.plot(time_list[1:], z_list, 'r+', label='Stock Prices')
+    label_list = ['Price', 'Velocity', 'Acceleration']
+
+    A_1day =continuous2discrete(A_cont,1)
+    x_pred, P_pred = [x_list[-1,:,:]], [P_list[-1,:,:]]
+    for i in range(7):
+        x, P = discrete_propagate(x_pred[-1],P_pred[-1],A_1day,Rt)
+        x_pred.append(x)
+        P_pred.append(P)
+
+    t_pred = time_list[-1]+np.arange(8)
+    x_pred = np.atleast_3d(x_pred)
+    P_pred = np.atleast_3d(P_pred)
+
+    for i, label in enumerate(label_list):
+        plt.sca(ax_list[i])
+        plt.ylabel(label)
+        plt.plot(time_list[1:],x_list[:,i,0])
+        mean_pred = x_pred[:,i,0]
+        plt.plot(t_pred,mean_pred,'c2')
+        e0 = np.array([[0, 0, 0]]).T
+        e0[i,0] = 1
+        e0 = e0[np.newaxis,...]
+        conf_interval = 2*np.sqrt(e0.swapaxes(-1,-2)@P_pred@e0).squeeze()
+        plt.fill_between(t_pred,mean_pred+conf_interval,mean_pred-conf_interval,alpha = .2)
+
+
+
+
+
+    plt.xlabel('Time (days)')
+    plt.show()
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
 
-    del_t = .1
-    A = np.array([[1, del_t, del_t ** 2 / 2],
-                  [0, 1, del_t],
-                  [0, 0, 1]])
-    B = None
+
+    A_cont = np.array([[0, 1, 0],
+                       [0, 0, 1],
+                       [0, 0, 0]])
+
     C = np.array([[1, 0, 0]])
 
-    Rt = np.diag([0, 0, 2])
+    Rt = np.diag([6, 0, .005])
 
     Qt = np.array([[2]])
 
     x = np.array([[500], [0], [0]])
-    P = np.zeros(1)
 
-    x_list, z_list = create_synthetic_data(A, B, C, Rt, Qt, x, P, num_samples=100)
 
-    plt.plot(z_list, '+')
-    plt.show()
+    time, x_list, z_list = create_synthetic_data(A_cont, C, Rt, Qt, x, num_samples=1000)
+    kalman_josh_main(A_cont, C, Rt, Qt, time, z_list)
+
+    # plt.plot(z_list, '+')
+    # plt.show()
 
     # del_t = .1
     # A_cont = np.array([[0, 1, 0],
